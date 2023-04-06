@@ -29,7 +29,7 @@ typedef struct quesBuff{
 void grade(int nQues, string ansKey, ansBuff ans[]) //function to calculate and display the grade
 {
 	int total = 0;
-	printf("******Grading******\n100 to 90 - A\n89 to 80 - B\n79 to 70 - C\n69 to 30 - D\nLess than 30 - FF\n*******************\n");
+	printf("******Grading******\n100 to 50 - A\n49 to 40 - B\n39 to 30 - C\n29 to 25 - D\nLess than 25 - FF\n*******************\n");
 	printf("ans key :%s\n", ansKey.c_str());
 	for (int i = 0; i < nQues; i++) //evaluating the answers
 	{
