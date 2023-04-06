@@ -4,9 +4,19 @@
 #include <unistd.h>
 using namespace std;
 
+#define EVENT_NUMBER 100
+#define CAPACITY 500
+#define S_THREAD 20
 #define MAX 5
+#define NTRIES 10 // N seconds
+#define RUN_TIME 60 // seconds
+#define SLEEP_TIME_FOR_QUERY_THREAD x % 6 + 3 // x is random
+#define NUMBER_OF_TICKETS x % 6 + 5
+#define SLEEP_TIME_FOR_PROCESS_THREAD 2
+#define SLEEP_TIME_FOR_RETRY 1
+
 int startTime = time(0);
-int runTime = 60; // seconds
+
 pthread_mutex_t lock_shared_table, lock_query_index, lock_process_index;
 
 struct SharedTable {
@@ -20,7 +30,8 @@ struct BookedTickets {
     int eventNumber;
     int TotalTickets;
     BookedTickets *next;
-};
+}; // In case of cancellation of ticket data will be collected from linked list
+
 
 void *randomQuery(void *arg);
 void *processRequest(void *arg);
@@ -68,6 +79,7 @@ class EventReservationSystem {
 
             int i = 0;
             while(i < MaxActiveQueries && shared_table[i].eventNumber != -1) ++i;
+            if(queryType == "book" && totalTickets > availableSeatsForEvent[eventNumber]) return -2;
             if(i == MaxActiveQueries) return 1;
             shared_table[i] = (SharedTable){eventNumber, queryType, threadnumber, totalTickets} ;
             return 0;
@@ -80,20 +92,16 @@ class EventReservationSystem {
             int threadNumber = shared_table[processId].threadNumber;
             
             if(queryType == "inquire") {
-                printf("\n*(%4ld) P Thread = %2d S | Q thread ID = %2d | query type = %10s | event = %4d | availabe seats = %4d | ", time(0) - startTime, processId, threadNumber, queryType.c_str(), eventNumber, availableSeatsForEvent[shared_table[processId].eventNumber]);
+                printf("\n*(%4ld) P Thread = %2d | Q thread ID = %2d | query type = %10s | event = %4d | Success | availabe seats = %4d | ", time(0) - startTime, processId, threadNumber, queryType.c_str(), eventNumber, availableSeatsForEvent[shared_table[processId].eventNumber]);
                 
             } else if(queryType == "book") {
                 int totalTickets = shared_table[processId].totalTickets;
-                if(totalTickets > availableSeatsForEvent[shared_table[processId].eventNumber])
-                    printf("\n*(%4ld) P Thread = %2d F | Q thread ID = %2d | query type = %10s | event = %4d | availabe seats = %4d | requested tickets = %d", time(0) - startTime, processId, threadNumber, queryType.c_str(), eventNumber, availableSeatsForEvent[shared_table[processId].eventNumber], totalTickets);
-                else {
-                    availableSeatsForEvent[shared_table[processId].eventNumber] -= totalTickets;
-                    printf("\n*(%4ld) P Thread = %2d S | Q thread ID = %2d | query type = %10s | event = %4d | availabe seats = %4d | booked tickets = %d", time(0) - startTime, processId, threadNumber, queryType.c_str(), eventNumber, availableSeatsForEvent[shared_table[processId].eventNumber], totalTickets);
-                }
+                availableSeatsForEvent[shared_table[processId].eventNumber] -= totalTickets;
+                printf("\n*(%4ld) P Thread = %2d | Q thread ID = %2d | query type = %10s | event = %4d | Success | availabe seats = %4d | booked tickets = %d", time(0) - startTime, processId, threadNumber, queryType.c_str(), eventNumber, availableSeatsForEvent[shared_table[processId].eventNumber], totalTickets);
             } else if(queryType == "cancel") {
                 int totalTickets = shared_table[processId].totalTickets;
                 availableSeatsForEvent[shared_table[processId].eventNumber] += totalTickets;
-                printf("\n*(%4ld) P Thread = %2d S | Q thread ID = %2d | query type = %10s | event = %4d | availabe seats = %4d | cancelled tickets = %d", time(0) - startTime, processId, threadNumber, queryType.c_str(), eventNumber, availableSeatsForEvent[shared_table[processId].eventNumber], totalTickets);
+                printf("\n*(%4ld) P Thread = %2d | Q thread ID = %2d | query type = %10s | event = %4d | Success | availabe seats = %4d | cancelled tickets = %d", time(0) - startTime, processId, threadNumber, queryType.c_str(), eventNumber, availableSeatsForEvent[shared_table[processId].eventNumber], totalTickets);
             }
             shared_table[processId] = (SharedTable){-1, "null", -1, -1};
             //printf("\n******** %d, %s, %d, %d", shared_table[processId].eventNumber, shared_table[processId].queryType.c_str(), shared_table[processId].threadNumber, shared_table[processId].totalTickets);
@@ -125,9 +133,9 @@ class EventReservationSystem {
 
         void showStats() {
             printf("\n\n ********* stats ********* \n");
-            printf("\nEvent : Available Seats");
+            printf("\nEvent | Available Seats | Booked Tickets");
             for(int i = 0; i < numberOfEvents; ++i)
-                printf("\n%5d : %d", i, availableSeatsForEvent[i]);
+                printf("\n%5d | %15d | %14d", i, availableSeatsForEvent[i], 500 - availableSeatsForEvent[i]);
             printf("\n");
         }
 };
@@ -143,12 +151,12 @@ void *randomQuery(void *arg) {
     printf("\nQ thread = %d", index);
 
     BookedTickets *b_tickets = NULL;
-    while(time(0) - startTime < runTime) {
+    while(time(0) - startTime < RUN_TIME) {
         int x = rand();
         int eventNumber = x % obj->numberOfEvents;
-        string queryType = arr[x%5];
+        string queryType = arr[x % 5];
         x = rand();
-        int totalTickets = (x % 6) + 5;
+        int totalTickets = NUMBER_OF_TICKETS;
 
         if(queryType == "cancel") { 
             if(b_tickets == NULL) continue;
@@ -156,19 +164,21 @@ void *randomQuery(void *arg) {
             eventNumber = b_tickets->eventNumber;
         }
 
-        // periodic query after every seconds in range 0 - 9
-        sleep(x%6+5);
+        // periodic query after every seconds in range 5 - 10
+        sleep(SLEEP_TIME_FOR_QUERY_THREAD);
 
         // Notice that when a query fails in order to insure database consistency, the
         // thread is not blocked. It instead proceeds to make the next query (after a short sleep) in
         // the loop.
-        bool retry = 1;
-        int n_retry = 10;
+        bool retry = true;
+        int n_retry = NTRIES;
         while(retry == 1 && n_retry--) {
+            retry = false;
             pthread_mutex_lock(&lock_shared_table);
-            retry = obj->updateSharedTable(eventNumber, queryType, index, totalTickets);
-            if(retry == 0) {
-                //printf("\n*(%ld) Query successful*\n Thread ID = %d | query type = %s",time(0) - startTime, index, queryType.c_str());
+            int result = obj->updateSharedTable(eventNumber, queryType, index, totalTickets);
+            pthread_mutex_unlock(&lock_shared_table); 
+            if(result == 0) {
+                //printf("\n\t\t*(%ld) Query successful* Thread ID = %d | query type = %s",time(0) - startTime, index, queryType.c_str());
                 if(queryType == "book") {
                     BookedTickets *temp = new BookedTickets();
                     temp->eventNumber = eventNumber;
@@ -180,11 +190,25 @@ void *randomQuery(void *arg) {
                     delete b_tickets;
                     b_tickets = temp;
                 }
-            } else {    
-                //printf("\n*(%ld) Query unsuccessful*\n Thread ID = %d | query type = %s",time(0) - startTime, index, queryType.c_str());
+            } else if(result == 1) {  
+                retry = true;
+                printf("\n*(%4ld) P Thread = %2d | Q thread ID = %2d | query type = %10s | event = %4d | Wait    | No space in active query", time(0) - startTime, -1, index, queryType.c_str(), eventNumber);
+                //printf("\n\t\t*(%ld) Query is in wait* Thread ID = %d | query type = %s",time(0) - startTime, index, queryType.c_str());
+                // At any point of time, at most MAX queries can be active. Any new query ((MAX + 1)st or
+                // (MAX + 2)nd or so on) must wait until one or more of the active queries finish. Use
+                // appropriate condition variable(s) to enforce this restriction. Note that this wait is to be
+                // interpreted as blocking, that is, a thread waiting for the server load to reduce must block
+                // until signaled by another thread during the completion of an active query.
+            } else if(result == -1){
+                printf("\n*(%4ld) P Thread = %2d | Q thread ID = %2d | query type = %10s | event = %4d | Failed  | Data Inconsistency problem", time(0) - startTime, -1, index, queryType.c_str(), eventNumber);
+                //printf("\n\t\t*(%ld) Query failed* Thread ID = %d | query type = %s",time(0) - startTime, index, queryType.c_str());
+                // Notice that when a query fails in order to insure database consistency, the
+                // thread is not blocked. It instead proceeds to make the next query (after a short sleep) in
+                // the loop.
+            } else {
+                printf("\n*(%4ld) P Thread = %2d | Q thread ID = %2d | query type = %10s | event = %4d | Failed  | availabe seats = %4d | requested tickets = %d | not enough seats", time(0) - startTime, -1, index, queryType.c_str(), eventNumber, result, totalTickets);
             }
-            pthread_mutex_unlock(&lock_shared_table); 
-            sleep(1);
+            sleep(SLEEP_TIME_FOR_RETRY);
         }
     }
     return NULL;
@@ -199,9 +223,9 @@ void *processRequest(void *arg) {
     pthread_mutex_unlock(&lock_process_index);
     printf("\nP thread = %d", index);
 
-    while(time(0) - startTime < runTime || obj->isQuery(index)) {
+    while(time(0) - startTime < RUN_TIME || obj->isQuery(index)) {
         obj->executeQuery(index);
-        sleep(2);
+        sleep(SLEEP_TIME_FOR_PROCESS_THREAD);
     }
     return NULL;
 }
@@ -225,9 +249,9 @@ int main() {
 
     // EventReservationSystem(int _numberOfEvents, int _capacity, int _MaxActiveQueries, int _totalWorkerThread))
 
-    int eventNumber = 100;
-    int capacity = 500;
-    int s_thread = 20;
+    int eventNumber = EVENT_NUMBER;
+    int capacity = CAPACITY;
+    int s_thread = S_THREAD; // number of worker threads to make queries
     int maxQueries = MAX;
 
     EventReservationSystem obj(eventNumber, capacity, maxQueries, s_thread);
