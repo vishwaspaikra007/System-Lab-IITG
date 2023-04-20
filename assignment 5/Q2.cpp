@@ -45,20 +45,21 @@ void southBoundPeople(int id){
 
 
 int main(int argc, char **argv){
+    // creating threads that represents people crossing the bridge
     thread persons[MAX_THREADS];
-    sem_init(&bridge, 0, 1);
-    int Case = stoi(argv[1]);
+    sem_init(&bridge, 0, 1); // initializing bridge semaphore
+    int Case = stoi(argv[1]); // getting case number rom command line input
 
-    if(Case == 2)sem_init(&dir, 0, 1);
-    else sem_init(&dir, 0, MAX_THREADS);
+    if(Case == 2)sem_init(&dir, 0, 1); // for case 2 initialize dir semaphore the number of people
+    else sem_init(&dir, 0, MAX_THREADS); // else initialize with 1
 
     for(int i = 0; i< MAX_THREADS; ++i){
-        if(i%2 == 0)persons[i] = thread(northBoundPeople, i+1);
-        else persons[i] = thread(southBoundPeople, i+1);
+        if(i%2 == 0)persons[i] = thread(northBoundPeople, i+1); // creating nothbpund people
+        else persons[i] = thread(southBoundPeople, i+1); // creating southbound people
     }
 
     for(int i = 0; i< MAX_THREADS; ++i){
-        persons[i].join();
+        persons[i].join(); // joining all the threads
     }
 
     return 0;
