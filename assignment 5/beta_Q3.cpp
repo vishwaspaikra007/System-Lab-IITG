@@ -180,9 +180,9 @@ class Schedule {
                 for(int i = 0 ; i < index; ++i) {
                     pthread_create(&thread[i].thread, NULL, callStartThread, &thread[i]); 
                 }
-                for(int i = 0; i < index; ++i) {
-                    pthread_join(thread[i].thread, NULL);
-                } 
+                // for(int i = 0; i < index; ++i) {
+                //     pthread_join(thread[i].thread, NULL);
+                // } 
                 // printf("server %d is sleeping", id);
                 //sleep(SERVER_SLEEP_TIME);
             }
