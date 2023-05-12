@@ -38,8 +38,8 @@ void* diner_thread(void* arg) // here diner threads will wait and enter restaura
     
     // Wait for all diners to arrive before starting service
     if (num_diners_inside == BATCH_SIZE || num_diners_left == 0 ) {
-        sleep(2);
-        sleep(0);
+        //leep(2);
+        //sleep(0);
         pthread_cond_broadcast(&service_cond);
     }
 
